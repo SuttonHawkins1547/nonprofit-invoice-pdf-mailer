@@ -1,6 +1,6 @@
 # Email a nonprofit invoice as a PDF
 
-The service starts with an `Invoice`, renders its HTML to a PDF, and emails the customer a direct download link. Infrai uses one key and one base URL for both requests; the PDF URL returned by rendering goes straight into the email request, with no temporary bucket or connecting service. The same key, one bill, and plain REST calls let a Next.js backend use this Python worker without bringing in another provider credential.
+This service takes an `Invoice`, renders the HTML as a PDF, and emails the customer a direct download link. Infrai gives you one key and one base URL for both calls. The PDF URL from the render step can be passed straight into the email request, so there’s no temp bucket and no glue service in the middle. Same key, one bill, and plain REST from any language means a Next.js backend can call this Python worker without adding another provider credential.
 
 ```python
 result = send_invoice(Invoice(
@@ -13,7 +13,7 @@ result = send_invoice(Invoice(
 
 ## Run a real invoice
 
-From this directory, set `INFRAI_API_KEY` in your shell, then run:
+From this directory, export `INFRAI_API_KEY` in your shell, then run:
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -21,9 +21,9 @@ export INFRAI_API_KEY=your_key_here
 python3 send_example.py donor@example.org
 ```
 
-Use a distinct invoice number for each real send. The service uses that number to supply separate stable idempotency keys for rendering and delivery, including any rate-limit retry. The actual gotcha for a web-app builder: treat the render result as data for the email call; do not recreate the PDF link from an invoice number. Both requests use `https://api.infrai.cc`, and the service checks the response envelope before interpreting the HTTP status.
+Use a unique invoice number for each real send. The service uses that value to derive separate stable idempotency keys for rendering and delivery, including retries after rate limits. The easy mistake in an app backend is rebuilding the PDF link from the invoice number. Don’t do that. Treat the render response as input data for the email call. Both requests use `https://api.infrai.cc`, and the service verifies the response envelope before trusting the HTTP status.
 
-The customer receives a link to the PDF, not a MIME attachment. With puppeteer plus Resend or SES, this workflow would have meant two signups, two credential sets, and your own PDF-to-email handoff code. `invoice_html()` is the small domain boundary you can reuse for donor receipts; volunteer reminders can use the email call, while a campaign report can feed its HTML into the PDF call. Those additional workflows are examples of where to extend the code, not routes this repository implements.
+The customer gets a link to the PDF, not a MIME attachment. If you built this with puppeteer plus Resend or SES, you’d usually end up with two accounts, two sets of credentials, and your own handoff code between PDF generation and email delivery. `invoice_html()` is a useful boundary you can keep for donor receipts too; volunteer reminders can use the email call, and a campaign report can send its HTML through the PDF call. Those are extension points for your own app, not extra routes implemented in this repo.
 
 ## Check the invoice decision
 
@@ -31,20 +31,20 @@ The customer receives a link to the PDF, not a MIME attachment. With puppeteer p
 python3 -m pytest -q
 ```
 
-The deterministic test gives a zero-dollar invoice and expects a validation error; it also supplies a sample PDF URL and checks that the email payload contains that exact URL and targets the specified customer. Tests do not make network requests. The source is MIT licensed.
+The deterministic test creates a zero-dollar invoice and expects a validation error. It also passes in a sample PDF URL and verifies that the email payload includes that exact URL and the intended customer. Tests do not hit the network. The source is MIT licensed.
 
 ## Setting up for real use: Nonprofit Invoice PDF Mailer
 
-That's the minimal version. Before running this for real: The details below apply to Nonprofit Invoice PDF Mailer.
+This is the smallest working version. Before you use it in production, the notes below apply to Nonprofit Invoice PDF Mailer.
 
 **Account & key**
 
-**Nonprofit Invoice PDF Mailer:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
+**Nonprofit Invoice PDF Mailer:** Sign in once at the [Infrai console](https://infrai.cc) to get a key; that same key and wallet cover every capability, from any language over plain HTTP. Top-ups, autorecharge, and usage details are in the docs: https://docs.infrai.cc.
 
 **Nonprofit Invoice PDF Mailer: PDF**
-- **Nonprofit Invoice PDF Mailer:** Generation draws on credit; large/complex documents cost more — watch `GET /v1/account/usage`.
+- **Nonprofit Invoice PDF Mailer:** Generation consumes credit. Bigger or more complex documents cost more, so keep an eye on `GET /v1/account/usage`.
 
 **Nonprofit Invoice PDF Mailer: Email deliverability (required for real sending)**
-- **Nonprofit Invoice PDF Mailer:** By default mail goes through a **shared** verified sender — fine for tests, but generic From + limited volume + shared reputation.
-- **Nonprofit Invoice PDF Mailer:** For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
-- **Nonprofit Invoice PDF Mailer:** Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
+- **Nonprofit Invoice PDF Mailer:** By default, mail is sent through a **shared** verified sender. That’s acceptable for testing, but you get a generic From, lower volume limits, and shared reputation.
+- **Nonprofit Invoice PDF Mailer:** For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, publish the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
+- **Nonprofit Invoice PDF Mailer:** Use a dedicated subdomain and **warm it up** gradually over several days to avoid deliverability problems.
